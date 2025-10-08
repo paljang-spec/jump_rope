@@ -470,6 +470,24 @@
                 margin: 2px;
             }
         }
+
+        /* 안드로이드 특화 스타일 */
+        .android-device input,
+        .android-device select,
+        .android-device button {
+            -webkit-appearance: none;
+            border-radius: 4px;
+        }
+        
+        /* 안드로이드에서의 폼 요소 렌더링 개선 */
+        .android-device .login-section input {
+            font-size: 16px !important;
+        }
+        
+        /* 안드로이드 키보드 관련 이슈 해결 */
+        .android-device .tab-content {
+            overflow: visible;
+        }
     </style>
 </head>
 <body>
@@ -501,8 +519,8 @@
             
             <div class="test-account">
                 <h4>테스트 계정 정보</h4>
-                <p><strong>관리자 :</strong> jong yun</p>
-                <p><strong>기록담당자 계정:</strong> 폰 / 번호 </p>
+                <p><strong>관리자 :</strong> MASTER</p>
+                <p><strong>기록담당자 계정:</strong> 폰/번호</p>
                 <p>데모를 위해 위 계정으로 로그인하세요.</p>
             </div>
         </section>
@@ -1002,29 +1020,71 @@
 
     <script>
         // 데이터 저장
-        let participants = JSON.parse(localStorage.getItem('participants')) || [];
-        let scores = JSON.parse(localStorage.getItem('scores')) || [];
-        let results = JSON.parse(localStorage.getItem('results')) || [];
-        let awardCriteria = JSON.parse(localStorage.getItem('awardCriteria')) || {};
-        let users = JSON.parse(localStorage.getItem('users')) || [];
+        let participants = [];
+        let scores = [];
+        let results = [];
+        let awardCriteria = {};
+        let users = [];
         let currentUser = null;
         let currentParticipant = null;
-        let excelData = []; // 엑셀 미리보기 데이터 저장
-        let editingUser = null; // 현재 수정 중인 사용자
+        let excelData = [];
+        let editingUser = null;
         
-        // 초기 데이터 설정
+        // 데이터 저장 함수 - 안드로이드 호환성 개선
+        function saveData(key, data) {
+            try {
+                localStorage.setItem(key, JSON.stringify(data));
+                return true;
+            } catch (e) {
+                console.error(`데이터 저장 오류 (${key}):`, e);
+                showNotification('데이터 저장 중 오류가 발생했습니다.', 'error');
+                return false;
+            }
+        }
+        
+        // 데이터 로드 함수 - 안드로이드 호환성 개선
+        function loadData(key, defaultValue = []) {
+            try {
+                const data = localStorage.getItem(key);
+                if (data) {
+                    return JSON.parse(data);
+                }
+            } catch (e) {
+                console.error(`데이터 로드 오류 (${key}):`, e);
+            }
+            return defaultValue;
+        }
+        
+        // 초기 데이터 설정 - 안드로이드 호환성 개선
         function initializeData() {
+            // 사용자 데이터 로드
+            users = loadData('users', []);
+            
             // 사용자 데이터가 없으면 기본 계정들 생성
             if (users.length === 0) {
                 users = [
-                    { username: 'admin', password: 'admin123', role: 'admin' },
-                    { username: 'recorder', password: 'recorder123', role: 'recorder' }
+                    { 
+                        username: 'admin', 
+                        password: 'admin123', 
+                        role: 'admin',
+                        created: new Date().toISOString()
+                    },
+                    { 
+                        username: 'recorder', 
+                        password: 'recorder123', 
+                        role: 'recorder',
+                        created: new Date().toISOString()
+                    }
                 ];
-                localStorage.setItem('users', JSON.stringify(users));
-            } else {
-                // 기존 사용자 데이터 로드
-                users = JSON.parse(localStorage.getItem('users'));
+                saveData('users', users);
+                console.log('기본 사용자 데이터 생성 완료');
             }
+            
+            // 다른 데이터 로드
+            participants = loadData('participants', []);
+            scores = loadData('scores', []);
+            results = loadData('results', []);
+            awardCriteria = loadData('awardCriteria', {});
             
             // 시상 기준 데이터가 없으면 기본값 설정
             if (Object.keys(awardCriteria).length === 0) {
@@ -1033,12 +1093,10 @@
                         '전체': { gold: 100, silver: 80, bronze: 60 }
                     }
                 };
-                localStorage.setItem('awardCriteria', JSON.stringify(awardCriteria));
-            } else {
-                awardCriteria = JSON.parse(localStorage.getItem('awardCriteria'));
+                saveData('awardCriteria', awardCriteria);
             }
         }
-        
+
         // 자동 검색 설정
         function setupAutoSearch() {
             const participantIdInput = document.getElementById('scoreParticipantId');
@@ -1062,88 +1120,37 @@
             });
         }
         
-        // 역할 기반 UI 제한
+        // 역할 기반 UI 제한 - 안드로이드 호환성 개선
         function setupRoleBasedUI() {
+            console.log('역할 기반 UI 설정, 역할:', currentUser.role);
+            
             if (currentUser.role !== 'admin') {
                 // 기록 담당자는 경기 기록 탭만 보이도록
-                document.querySelectorAll('.tab').forEach(tab => {
+                const tabs = document.querySelectorAll('.tab');
+                tabs.forEach(tab => {
                     if (tab.dataset.tab !== 'scores') {
                         tab.style.display = 'none';
                     }
                 });
                 
-                // 경기 기록 탭으로 자동 이동
-                switchTab('scores');
+                // 경기 기록 탭으로 자동 이동 (안드로이드에서 약간의 지연 필요)
+                setTimeout(() => {
+                    switchTab('scores');
+                }, 100);
                 
                 // 모바일 최적화 스타일 적용
                 applyMobileOptimizations();
+            } else {
+                // 관리자는 모든 탭 표시
+                const tabs = document.querySelectorAll('.tab');
+                tabs.forEach(tab => {
+                    tab.style.display = 'block';
+                });
             }
         }
         
         // 모바일 최적화 스타일
         function applyMobileOptimizations() {
-            const style = document.createElement('style');
-            style.textContent = `
-                @media (max-width: 768px) {
-                    /* 모바일에서 더 큰 터치 영역 */
-                    .mobile-optimized input,
-                    .mobile-optimized select,
-                    .mobile-optimized button {
-                        font-size: 16px !important; /* iOS zoom 방지 */
-                        min-height: 44px !important;
-                        padding: 12px 8px !important;
-                    }
-                    
-                    /* 경기 기록 입력 폼 모바일 최적화 */
-                    #scoreForm {
-                        grid-template-columns: 1fr !important;
-                        gap: 10px !important;
-                    }
-                    
-                    .form-group {
-                        margin-bottom: 15px !important;
-                    }
-                    
-                    /* 테이블 모바일 친화적으로 */
-                    table {
-                        font-size: 14px;
-                    }
-                    
-                    th, td {
-                        padding: 8px 4px !important;
-                    }
-                    
-                    /* 액션 버튼 모바일 최적화 */
-                    .mobile-action-buttons {
-                        display: flex;
-                        flex-direction: column;
-                        gap: 8px;
-                    }
-                    
-                    .mobile-action-buttons button {
-                        width: 100%;
-                        margin: 2px 0;
-                    }
-                }
-                
-                /* 매우 작은 화면 대응 */
-                @media (max-width: 480px) {
-                    .container {
-                        padding: 5px !important;
-                    }
-                    
-                    header h1 {
-                        font-size: 1.2rem !important;
-                    }
-                    
-                    .tab {
-                        padding: 10px 8px !important;
-                        font-size: 12px !important;
-                    }
-                }
-            `;
-            document.head.appendChild(style);
-            
             // 모바일 최적화 클래스 추가
             document.getElementById('scoreForm').classList.add('mobile-optimized');
             document.querySelectorAll('#scores button').forEach(btn => {
@@ -1241,41 +1248,98 @@
                 }
             }
         }
-        
-        // 로그인 처리
+
+        // 로그인 에러 표시 함수
+        function showLoginError(message) {
+            const errorElement = document.getElementById('loginError');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+            
+            // 5초 후 에러 메시지 숨기기
+            setTimeout(() => {
+                errorElement.style.display = 'none';
+            }, 5000);
+        }
+
+        // 안드로이드 호환성을 위한 로그인 함수 개선
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
             
-            const user = users.find(u => u.username === username && u.password === password);
+            console.log('로그인 시도:', { username, password });
+            console.log('저장된 사용자:', users);
+            
+            // 입력값 검증
+            if (!username || !password) {
+                showLoginError('사용자명과 비밀번호를 입력해주세요.');
+                return;
+            }
+            
+            // 사용자 찾기 - 안드로이드 호환성 개선
+            let user = null;
+            try {
+                user = users.find(u => {
+                    // 대소문자 구분 없이 비교 (안드로이드 키보드 문제 대응)
+                    const usernameMatch = u.username.toLowerCase() === username.toLowerCase();
+                    const passwordMatch = u.password === password;
+                    console.log(`비교: ${u.username}(${usernameMatch}) / ${u.password}(${passwordMatch})`);
+                    return usernameMatch && passwordMatch;
+                });
+            } catch (error) {
+                console.error('사용자 검색 오류:', error);
+                showLoginError('로그인 처리 중 오류가 발생했습니다.');
+                return;
+            }
             
             if (user) {
+                console.log('로그인 성공:', user);
                 currentUser = user;
-                localStorage.setItem('currentUser', JSON.stringify(user));
-                showNotification('로그인 성공!', 'success');
-                loadApp();
+                try {
+                    localStorage.setItem('currentUser', JSON.stringify(user));
+                    showNotification('로그인 성공!', 'success');
+                    
+                    // 잠시 대기 후 앱 로드 (안드로이드 렌더링 문제 해결)
+                    setTimeout(() => {
+                        loadApp();
+                    }, 100);
+                    
+                } catch (e) {
+                    console.error('로그인 상태 저장 오류:', e);
+                    showLoginError('로그인 상태 저장 중 오류가 발생했습니다.');
+                }
             } else {
-                document.getElementById('loginError').textContent = '사용자명 또는 비밀번호가 올바르지 않습니다.';
-                document.getElementById('loginError').style.display = 'block';
-                showNotification('로그인 실패: 사용자명 또는 비밀번호가 올바르지 않습니다.', 'error');
+                console.log('로그인 실패: 사용자를 찾을 수 없음');
+                showLoginError('사용자명 또는 비밀번호가 올바르지 않습니다.');
+                showNotification('로그인 실패: 사용자명 또는 비밀번호를 확인해주세요.', 'error');
             }
         });
         
         // 로그아웃
         function logout() {
+            console.log('로그아웃');
             currentUser = null;
-            localStorage.removeItem('currentUser');
+            try {
+                localStorage.removeItem('currentUser');
+            } catch (e) {
+                console.error('로그아웃 중 오류:', e);
+            }
+            
             document.getElementById('loginSection').style.display = 'block';
             document.getElementById('appHeader').style.display = 'none';
             document.getElementById('mainApp').style.display = 'none';
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
             document.getElementById('loginError').style.display = 'none';
+            
+            showNotification('로그아웃 되었습니다.', 'success');
         }
         
-        // 앱 로드
+        // 앱 로드 함수 개선 - 안드로이드 호환성
         function loadApp() {
+            console.log('앱 로드 시작, 현재 사용자:', currentUser);
+            
+            // UI 전환
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('appHeader').style.display = 'flex';
             document.getElementById('mainApp').style.display = 'block';
@@ -1297,18 +1361,35 @@
             // 모바일 단축키 설정
             setupMobileShortcuts();
             
-            // 데이터 로드
-            loadParticipants();
-            loadScores();
-            loadRankings();
-            loadCriteria();
-            loadUsers();
-            updateDashboard();
+            // 데이터 로드 - 안드로이드에서 순차적으로 실행
+            setTimeout(() => {
+                loadParticipants();
+            }, 50);
+            
+            setTimeout(() => {
+                loadScores();
+            }, 100);
+            
+            setTimeout(() => {
+                loadRankings();
+            }, 150);
+            
+            setTimeout(() => {
+                loadCriteria();
+            }, 200);
+            
+            setTimeout(() => {
+                loadUsers();
+            }, 250);
+            
+            setTimeout(() => {
+                updateDashboard();
+                showNotification(`${currentUser.username}님, 환영합니다!`, 'success');
+                console.log('앱 로드 완료');
+            }, 300);
             
             // 탭 전환 이벤트 설정
             setupTabEvents();
-            
-            showNotification(`${currentUser.username}님, 환영합니다!`, 'success');
         }
         
         // 탭 전환 함수
@@ -1423,7 +1504,7 @@
             }
             
             participants.push({ id, name, team, grade });
-            localStorage.setItem('participants', JSON.stringify(participants));
+            saveData('participants', participants);
             
             showNotification('참가자가 성공적으로 추가되었습니다.', 'success');
             loadParticipants();
@@ -1438,15 +1519,15 @@
             if (confirm('정말로 이 참가자를 삭제하시겠습니까? 관련된 모든 기록도 함께 삭제됩니다.')) {
                 // 참가자 삭제
                 participants = participants.filter(p => p.id !== id);
-                localStorage.setItem('participants', JSON.stringify(participants));
+                saveData('participants', participants);
                 
                 // 관련 기록 삭제
                 scores = scores.filter(s => s.participantId !== id);
-                localStorage.setItem('scores', JSON.stringify(scores));
+                saveData('scores', scores);
                 
                 // 관련 결과 삭제
                 results = results.filter(r => r.participantId !== id);
-                localStorage.setItem('results', JSON.stringify(results));
+                saveData('results', results);
                 
                 showNotification('참가자가 삭제되었습니다.', 'success');
                 loadParticipants();
@@ -1516,7 +1597,7 @@
                 date: new Date().toISOString()
             });
             
-            localStorage.setItem('scores', JSON.stringify(scores));
+            saveData('scores', scores);
             
             // 결과 업데이트
             updateResults(participantId, event, value);
@@ -1533,11 +1614,11 @@
         function deleteScore(participantId, event) {
             if (confirm('정말로 이 경기 기록을 삭제하시겠습니까?')) {
                 scores = scores.filter(s => !(s.participantId === participantId && s.event === event));
-                localStorage.setItem('scores', JSON.stringify(scores));
+                saveData('scores', scores);
                 
                 // 결과도 함께 삭제
                 results = results.filter(r => !(r.participantId === participantId && r.event === event));
-                localStorage.setItem('results', JSON.stringify(results));
+                saveData('results', results);
                 
                 showNotification('경기 기록이 삭제되었습니다.', 'success');
                 loadScores();
@@ -1588,7 +1669,7 @@
                 date: new Date().toISOString()
             });
             
-            localStorage.setItem('results', JSON.stringify(results));
+            saveData('results', results);
         }
         
         // 순위 로드
@@ -1759,7 +1840,7 @@
             
             // 시상 기준 저장
             awardCriteria[event][grade] = { gold, silver, bronze };
-            localStorage.setItem('awardCriteria', JSON.stringify(awardCriteria));
+            saveData('awardCriteria', awardCriteria);
             
             showNotification('시상 기준이 저장되었습니다.', 'success');
             loadCriteria();
@@ -1792,7 +1873,7 @@
                     delete awardCriteria[event];
                 }
                 
-                localStorage.setItem('awardCriteria', JSON.stringify(awardCriteria));
+                saveData('awardCriteria', awardCriteria);
                 showNotification('시상 기준이 삭제되었습니다.', 'success');
                 loadCriteria();
             }
@@ -1835,7 +1916,7 @@
             }
             
             users.push({ username, password, role });
-            localStorage.setItem('users', JSON.stringify(users));
+            saveData('users', users);
             
             showNotification('사용자가 성공적으로 추가되었습니다.', 'success');
             loadUsers();
@@ -1886,7 +1967,7 @@
                     users[userIndex].password = password;
                 }
                 
-                localStorage.setItem('users', JSON.stringify(users));
+                saveData('users', users);
                 
                 showNotification('사용자 정보가 수정되었습니다.', 'success');
                 loadUsers();
@@ -1903,7 +1984,7 @@
             
             if (confirm('정말로 이 사용자를 삭제하시겠습니까?')) {
                 users = users.filter(u => u.username !== username);
-                localStorage.setItem('users', JSON.stringify(users));
+                saveData('users', users);
                 
                 showNotification('사용자가 삭제되었습니다.', 'success');
                 loadUsers();
@@ -2001,7 +2082,7 @@
                 }
             });
             
-            localStorage.setItem('participants', JSON.stringify(participants));
+            saveData('participants', participants);
             
             // 결과 모달 표시
             const modalBody = document.getElementById('modalBody');
@@ -2082,25 +2163,66 @@
         document.getElementById('rankingFilter').addEventListener('change', loadRankings);
         document.getElementById('criteriaFilterEvent').addEventListener('change', loadCriteria);
         
+        // 안드로이드 최적화 적용
+        function applyAndroidOptimizations() {
+            console.log('안드로이드 최적화 적용');
+            
+            // 안드로이드에서의 입력 필드 포커스 문제 해결
+            document.addEventListener('focusin', function(e) {
+                if (e.target.matches('input, select, textarea')) {
+                    setTimeout(() => {
+                        e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 300);
+                }
+            });
+        }
+        
         // 앱 초기화
         function initApp() {
+            console.log('앱 초기화 시작');
+            
+            // 데이터 초기화
             initializeData();
             
-            // 모바일 감지
+            // 모바일 감지 및 최적화
             if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
                 document.body.classList.add('mobile-device');
-                showNotification('모바일 최적화 모드로 실행됩니다.', 'info');
+                console.log('모바일 디바이스 감지');
+                
+                // 안드로이드 특화 설정
+                if (/Android/i.test(navigator.userAgent)) {
+                    document.body.classList.add('android-device');
+                    console.log('안드로이드 디바이스 감지');
+                    
+                    // 안드로이드에서의 추가 설정
+                    applyAndroidOptimizations();
+                }
             }
             
             // 로그인 상태 확인
-            const savedUser = localStorage.getItem('currentUser');
-            if (savedUser) {
-                currentUser = JSON.parse(savedUser);
-                loadApp();
+            try {
+                const savedUser = localStorage.getItem('currentUser');
+                if (savedUser) {
+                    currentUser = JSON.parse(savedUser);
+                    console.log('저장된 사용자 로드:', currentUser);
+                    
+                    // 자동 로그인 (약간의 지연을 두어 렌더링 보장)
+                    setTimeout(() => {
+                        loadApp();
+                    }, 200);
+                } else {
+                    console.log('저장된 사용자 없음');
+                }
+            } catch (e) {
+                console.error('로그인 상태 복원 오류:', e);
+                // 오류 발생 시 로그인 화면 유지
             }
+            
+            console.log('앱 초기화 완료');
         }
         
         // 앱 실행
+        console.log('앱 실행 시작');
         initApp();
     </script>
 </body>
